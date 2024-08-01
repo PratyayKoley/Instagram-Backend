@@ -95,11 +95,9 @@ app.post("/login", async (req,res) => {
 
 app.post("/verify-token", (req,res) => {
   const token = req.headers.authorization.split(' ')[1];
-  console.log(token);
   if(token){
     try{
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      console.log(decoded);
       res.send(
         {
           "valid": true,
@@ -124,6 +122,27 @@ app.post("/verify-token", (req,res) => {
         "message": "Token not found"
       }
     )
+  }
+})
+
+app.post("/get-user-data", async (req,res) => {
+  const {userid} = req.body;
+
+  try{
+    const data = await userData.findOne({_id: userid});
+    console.log(data);
+    res.send({
+      "userData": true,
+      "realname": data.realname,
+      "username": data.username,
+      "message": "User Found"
+    })
+  }
+  catch(err){
+    res.send({
+      "userData": false,
+      "message": "User Data null"
+    })
   }
 })
 
