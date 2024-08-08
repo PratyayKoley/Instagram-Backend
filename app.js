@@ -4,6 +4,7 @@ const cors = require("cors");
 const { default: mongoose, model, mongo } = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require('jsonwebtoken');
+const {Server} = require("socket.io");
 
 const saltRounds = 10;
 const DB = require("./database.js"); //loading the database and its connection
@@ -24,6 +25,8 @@ const commentsData = mongoose.model("Comments", comments.commentsSchema);
 const notificationsData = mongoose.model("Notifications", notifications.notificationsSchema);
 
 const app = express();
+// const server = new Server(app);
+// const io = new Server(server);
 require("dotenv").config();
 app.use(cors());
 app.use(bodyParser.json());
@@ -31,6 +34,11 @@ app.use(bodyParser.json());
 const salt = bcrypt.genSaltSync(saltRounds);
 const port = process.env.PORT || 5000;
 console.log("Server is running on port : ", port);
+
+// io.on("connection", (socket) => {
+//   console.log("User Connected");
+//   console.log("Socket Id : ", socket.id);
+// })
 
 app.get("/", function (req, res) {
   res.send("Hello");
