@@ -3,8 +3,8 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const { default: mongoose, model, mongo } = require("mongoose");
 const bcrypt = require("bcrypt");
-const jwt = require('jsonwebtoken');
-const {Server} = require("socket.io");
+const jwt = require("jsonwebtoken");
+const { Server } = require("socket.io");
 
 const saltRounds = 10;
 const DB = require("./database.js"); //loading the database and its connection
@@ -22,7 +22,10 @@ const postData = mongoose.model("Posts", posts.postSchema);
 const storiesData = mongoose.model("Stories", stories.storiesSchema);
 const likesData = mongoose.model("Likes", likes.likesSchema);
 const commentsData = mongoose.model("Comments", comments.commentsSchema);
-const notificationsData = mongoose.model("Notifications", notifications.notificationsSchema);
+const notificationsData = mongoose.model(
+  "Notifications",
+  notifications.notificationsSchema
+);
 
 const app = express();
 // const server = new Server(app);
@@ -44,7 +47,7 @@ app.get("/", function (req, res) {
   res.send("Hello");
 });
 
-app.post("/register", (req, res) => {
+app.post("/register", async (req, res) => {
   const { email, realname, username, pass } = req.body;
   const hash = bcrypt.hashSync(pass, salt);
 
@@ -54,107 +57,126 @@ app.post("/register", (req, res) => {
     res.send("Invalid email");
   } else {
     res.send("Signup Successful");
-    userData.create({
+    const newUser = await userData.create({
       realname: realname,
       email: email,
       username: username,
       password: hash,
       createdAt: new Date(),
     });
+        
+    await profileData.create({
+      realname: realname,
+      username: username,
+      user_id: newUser._id,
+      createdAt: new Date(),
+    });
   }
-
-  console.log(req.body);
 });
 
-app.post("/login", async (req,res) => {
-  const {login_Username, pass} = req.body;
-  const DB_Data = await userData.findOne({username: login_Username});
+app.post("/login", async (req, res) => {
+  const { login_Username, pass } = req.body;
+  const DB_Data = await userData.findOne({ username: login_Username });
   console.log(DB_Data);
-  if(DB_Data === null){
+  if (DB_Data === null) {
     res.send({
-      "success": false,
-      "message": "User does not exist"
+      success: false,
+      message: "User does not exist",
     });
     return;
   }
   const isMatch = await bcrypt.compare(pass, DB_Data.password);
   console.log(isMatch);
-  
-  var token = await jwt.sign({user_id: DB_Data._id}, process.env.JWT_SECRET);
+
+  var token = await jwt.sign({ user_id: DB_Data._id }, process.env.JWT_SECRET);
   console.log(token);
 
-  if(isMatch){
+  if (isMatch) {
     res.send({
-      "success": true,
-      "token": token,
-      "username": DB_Data.username,
-      "realname": DB_Data.realname,
-      "userID": DB_Data._id
+      success: true,
+      token: token,
+      username: DB_Data.username,
+      realname: DB_Data.realname,
+      userID: DB_Data._id,
     });
     return;
-  }
-  else{
+  } else {
     res.send({
-      "success": false,
-      "message": "Not a valid password"
+      success: false,
+      message: "Not a valid password",
     });
   }
-})
+});
 
-app.post("/verify-token", (req,res) => {
-  const token = req.headers.authorization.split(' ')[1];
-  if(token){
-    try{
+app.post("/verify-token", (req, res) => {
+  const token = req.headers.authorization.split(" ")[1];
+  if (token) {
+    try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      res.send(
-        {
-          "valid": true,
-          "message": "Successfully Validated",
-          "user": decoded
-        }
-      )
+      res.send({
+        valid: true,
+        message: "Successfully Validated",
+        user: decoded,
+      });
+    } catch (err) {
+      res.send({
+        valid: false,
+        message: "Invalid Token",
+      });
     }
-    catch(err){
-      res.send(
-        {
-          "valid": false,
-          "message": "Invalid Token"
-        }
-      )
-    }
+  } else {
+    res.send({
+      valid: false,
+      message: "Token not found",
+    });
   }
-  else{
-    res.send(
-      {
-        "valid": false,
-        "message": "Token not found"
-      }
-    )
-  }
-})
+});
 
-app.post("/get-user-data", async (req,res) => {
+app.post("/get-user-data", async (req, res) => {
+  const { userid } = req.body;
+
+  try {
+    const data = await userData.findOne({ _id: userid });
+    console.log(data);
+    res.send({
+      userData: true,
+      realname: data.realname,
+      username: data.username,
+      message: "User Found",
+    });
+  } catch (err) {
+    res.send({
+      userData: false,
+      message: "User Data null",
+    });
+  }
+});
+
+app.post("/get-profile-data", async(req,res) => {
   const {userid} = req.body;
 
   try{
-    const data = await userData.findOne({_id: userid});
+    const data = await profileData.findOne({user_id: userid});
     console.log(data);
+    
     res.send({
-      "userData": true,
-      "realname": data.realname,
-      "username": data.username,
-      "message": "User Found"
+      profileData: true,
+      realname: data.realname,
+      username: data.username,
+      num_posts: data.num_posts,
+      num_followers: data.num_followers,
+      num_following: data.num_following,
+      bio: data.bio,
+      message: "Profile Data found",
     })
   }
-  catch(err){
+  catch(err) {
     res.send({
-      "userData": false,
-      "message": "User Data null"
+      profileData: false,
+      message: "Profile Data is null"
     })
   }
 })
-
-
 
 // Find
 // app.get("/users", async (req, res) => {
@@ -186,16 +208,6 @@ app.post("/get-user-data", async (req,res) => {
 //   const result = await userData.deleteOne({realname: "shfuhid"});
 //   res.send("Success");
 // })
-
-// profileData.create({
-//   username: String,
-//   num_posts: 0,
-//   num_followers: 12,
-//   num_following: 20,
-//   bio: String,
-//   posts_id: '669c0dec7406d0e13fc36a54',
-//   createdAt: new Date(),
-// });
 
 // postData.create({
 //   post_url: String,
