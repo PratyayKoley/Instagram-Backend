@@ -7,6 +7,7 @@ const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 
 const saltRounds = 10;
+let DB_Data = null;
 const DB = require("./database.js"); //loading the database and its connection
 const users = require("./models/users.js");
 const profile = require("./models/profile.js");
@@ -56,7 +57,6 @@ app.post("/register", async (req, res) => {
   } else if (!email.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+.[a-zA-Z]{2,}$/)) {
     res.send("Invalid email");
   } else {
-    res.send("Signup Successful");
     const newUser = await userData.create({
       realname: realname,
       email: email,
@@ -64,20 +64,24 @@ app.post("/register", async (req, res) => {
       password: hash,
       createdAt: new Date(),
     });
-        
+
     await profileData.create({
       realname: realname,
       username: username,
       user_id: newUser._id,
       createdAt: new Date(),
     });
+    res.send("Signup Successful");
   }
 });
 
 app.post("/login", async (req, res) => {
   const { login_Username, pass } = req.body;
-  const DB_Data = await userData.findOne({ username: login_Username });
-  console.log(DB_Data);
+  if (login_Username.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+.[a-zA-Z]{2,}$/)) {
+    DB_Data = await userData.findOne({ email: login_Username });
+  } else {
+    DB_Data = await userData.findOne({ username: login_Username });
+  }
   if (DB_Data === null) {
     res.send({
       success: false,
@@ -86,10 +90,8 @@ app.post("/login", async (req, res) => {
     return;
   }
   const isMatch = await bcrypt.compare(pass, DB_Data.password);
-  console.log(isMatch);
 
   var token = await jwt.sign({ user_id: DB_Data._id }, process.env.JWT_SECRET);
-  console.log(token);
 
   if (isMatch) {
     res.send({
@@ -137,7 +139,6 @@ app.post("/get-user-data", async (req, res) => {
 
   try {
     const data = await userData.findOne({ _id: userid });
-    console.log(data);
     res.send({
       userData: true,
       realname: data.realname,
@@ -152,31 +153,60 @@ app.post("/get-user-data", async (req, res) => {
   }
 });
 
-app.post("/get-profile-data", async(req,res) => {
-  const {userid} = req.body;
+app.post("/get-profile-data", async (req, res) => {
+  const { userid } = req.body;
 
-  try{
-    const data = await profileData.findOne({user_id: userid});
-    console.log(data);
-    
+  try {
+    const userProfile = await profileData.findOne({ user_id: userid });
+    const user = await userData.findOne({ _id: userProfile.user_id });
+
     res.send({
-      profileData: true,
-      realname: data.realname,
-      username: data.username,
-      num_posts: data.num_posts,
-      num_followers: data.num_followers,
-      num_following: data.num_following,
-      bio: data.bio,
+      success: true,
+      realname: user.realname,
+      username: user.username,
+      num_posts: userProfile.num_posts,
+      num_followers: userProfile.num_followers,
+      num_following: userProfile.num_following,
+      bio: userProfile.bio,
       message: "Profile Data found",
-    })
-  }
-  catch(err) {
+    });
+  } catch (err) {
     res.send({
-      profileData: false,
-      message: "Profile Data is null"
-    })
+      success: false,
+      message: "Profile Data is null",
+    });
   }
-})
+});
+
+app.post("/search-user", async (req, res) => {
+  const { nameOfUser } = req.body;
+
+  try {
+    const searchedProfile = await userData.find({
+      $or: [{ realname: nameOfUser }, { username: nameOfUser }],
+    });
+
+    if(searchedProfile)
+    {
+      res.send({
+        search_success: true,
+        message: "User found.",
+        profiles: searchedProfile
+      });
+    }
+    else{
+      res.send({
+        search_success: false,
+        message: "User not found."
+      })
+    }
+  } catch (err) {
+    res.send({
+      search_success: false,
+      message: "Request Error"
+    });
+  }
+});
 
 // Find
 // app.get("/users", async (req, res) => {
