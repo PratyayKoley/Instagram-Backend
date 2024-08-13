@@ -4,6 +4,7 @@ const cors = require("cors");
 const { default: mongoose, model, mongo } = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
 const { Server } = require("socket.io");
 
 const saltRounds = 10;
@@ -16,6 +17,7 @@ const stories = require("./models/stories.js");
 const likes = require("./models/likes.js");
 const comments = require("./models/comments.js");
 const notifications = require("./models/notifications.js");
+const { log } = require("console");
 
 const userData = mongoose.model("User", users.userSchema);
 const profileData = mongoose.model("Profile", profile.profileSchema);
@@ -43,7 +45,9 @@ console.log("Server is running on port : ", port);
 //   console.log("User Connected");
 //   console.log("Socket Id : ", socket.id);
 // })
-
+// fs.
+// fs.appendFileSync('test.txt', 'data to append\n', 'utf8'); 
+// fs.writeFileSync("test.txt", "Ho Nod  e.js")
 app.get("/", function (req, res) {
   res.send("Hello");
 });
@@ -110,15 +114,18 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.post("/verify-token", (req, res) => {
+app.post("/verify-token", async (req, res) => {
   const token = req.headers.authorization.split(" ")[1];
   if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);      
+      const userdata = await userData.findOne({_id: decoded.user_id})      
+
       res.send({
         valid: true,
         message: "Successfully Validated",
-        user: decoded,
+        username: userdata.username,
+
       });
     } catch (err) {
       res.send({
@@ -135,10 +142,10 @@ app.post("/verify-token", (req, res) => {
 });
 
 app.post("/get-user-data", async (req, res) => {
-  const { userid } = req.body;
+  const { userName } = req.body;
 
   try {
-    const data = await userData.findOne({ _id: userid });
+    const data = await userData.findOne({ username: userName });
     res.send({
       userData: true,
       realname: data.realname,
@@ -154,11 +161,12 @@ app.post("/get-user-data", async (req, res) => {
 });
 
 app.post("/get-profile-data", async (req, res) => {
-  const { userid } = req.body;
+  const { username } = req.body;
 
   try {
-    const userProfile = await profileData.findOne({ user_id: userid });
-    const user = await userData.findOne({ _id: userProfile.user_id });
+    const user = await userData.findOne({ username: username });
+    const userProfile = await profileData.findOne({ user_id: user._id });
+    
 
     res.send({
       success: true,
