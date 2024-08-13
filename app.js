@@ -4,7 +4,6 @@ const cors = require("cors");
 const { default: mongoose, model, mongo } = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const fs = require("fs");
 const { Server } = require("socket.io");
 
 const saltRounds = 10;
@@ -17,7 +16,6 @@ const stories = require("./models/stories.js");
 const likes = require("./models/likes.js");
 const comments = require("./models/comments.js");
 const notifications = require("./models/notifications.js");
-const { log } = require("console");
 
 const userData = mongoose.model("User", users.userSchema);
 const profileData = mongoose.model("Profile", profile.profileSchema);
@@ -41,13 +39,6 @@ const salt = bcrypt.genSaltSync(saltRounds);
 const port = process.env.PORT || 5000;
 console.log("Server is running on port : ", port);
 
-// io.on("connection", (socket) => {
-//   console.log("User Connected");
-//   console.log("Socket Id : ", socket.id);
-// })
-// fs.
-// fs.appendFileSync('test.txt', 'data to append\n', 'utf8'); 
-// fs.writeFileSync("test.txt", "Ho Nod  e.js")
 app.get("/", function (req, res) {
   res.send("Hello");
 });
