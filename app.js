@@ -5,6 +5,8 @@ const { default: mongoose, model, mongo } = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
+const { createServer } = require("http");
+const { OAuth2Client } = require("google-auth-library");
 
 const saltRounds = 10;
 let DB_Data = null;
@@ -16,6 +18,7 @@ const stories = require("./models/stories.js");
 const likes = require("./models/likes.js");
 const comments = require("./models/comments.js");
 const notifications = require("./models/notifications.js");
+const messages = require("./models/messages.js");
 
 const userData = mongoose.model("User", users.userSchema);
 const profileData = mongoose.model("Profile", profile.profileSchema);
@@ -23,17 +26,24 @@ const postData = mongoose.model("Posts", posts.postSchema);
 const storiesData = mongoose.model("Stories", stories.storiesSchema);
 const likesData = mongoose.model("Likes", likes.likesSchema);
 const commentsData = mongoose.model("Comments", comments.commentsSchema);
-const notificationsData = mongoose.model(
-  "Notifications",
-  notifications.notificationsSchema
-);
+const notificationsData = mongoose.model("Notifications", notifications.notificationsSchema);
+const messagesData = mongoose.model("Messages", messages.messageSchema);
 
 const app = express();
-// const server = new Server(app);
-// const io = new Server(server);
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  },
+});
 require("dotenv").config();
 app.use(cors());
 app.use(bodyParser.json());
+const activeUsers = {};
+const oauth2Client = new OAuth2Client();
 
 const salt = bcrypt.genSaltSync(saltRounds);
 const port = process.env.PORT || 5000;
@@ -41,6 +51,75 @@ console.log("Server is running on port : ", port);
 
 app.get("/", function (req, res) {
   res.send("Hello");
+});
+
+io.on("connection", (socket) => {
+  console.log("User Connected", socket.id);
+
+  socket.on("user-connect", (userName) => {
+    activeUsers[userName] = socket.id;
+    console.log(`${userName} is connected to ${socket.id}`);
+  });
+
+  socket.on("send-message", async (data) => {
+    const {from, to, message} = data;
+
+    try {
+      // Ensure 'from' and 'to' are valid ObjectIds
+      const fromUser = await userData.findOne({ username: from });
+      const toUser = await userData.findOne({ username: to });
+
+      if (!fromUser) {
+        throw new Error("Invalid 'from' user");
+      }
+      if(!toUser){
+        throw new Error("Invalid 'to' user");
+      }
+
+      const isRecepientOnline = !!activeUsers[to];    //converts the value to boolean value
+
+      // Store the message in the database
+      await messagesData.create({
+        from: fromUser._id,  // Use the ObjectId
+        to: toUser._id,      // Use the ObjectId
+        message: message,
+        createdAt: new Date(),
+        isRead: isRecepientOnline,
+      })
+
+      // If user is online, send the message
+      if (activeUsers[to]) {
+        const recSocketID = activeUsers[to];
+        io.to(recSocketID).emit("receive_message", {
+          senderID: socket.id,
+          recepientID: recSocketID,
+          message: message,
+          from: from,
+        });
+        console.log(`Message sent to online user ${to}`);
+      } else {
+        console.log(
+          `User ${to} is offline. Message stored for later delivery.`
+        );
+      }
+    } catch (error) {
+      console.error(
+        `Failed to process message for user ${to}:`,
+        error
+      );
+      socket.emit("message_error", { error: "Failed to send message" });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    for (let username in activeUsers) {
+      if (activeUsers[username] === socket.id) {
+        delete activeUsers[username];
+        console.log("User Disconnected", username, socket.id);
+        break;
+      }
+    }
+  });
 });
 
 app.post("/register", async (req, res) => {
@@ -109,14 +188,13 @@ app.post("/verify-token", async (req, res) => {
   const token = req.headers.authorization.split(" ")[1];
   if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);      
-      const userdata = await userData.findOne({_id: decoded.user_id})      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userdata = await userData.findOne({ _id: decoded.user_id });
 
       res.send({
         valid: true,
         message: "Successfully Validated",
         username: userdata.username,
-
       });
     } catch (err) {
       res.send({
@@ -157,14 +235,13 @@ app.post("/get-profile-data", async (req, res) => {
   try {
     const user = await userData.findOne({ username: username });
     const userProfile = await profileData.findOne({ user_id: user._id });
-    
 
     res.send({
       success: true,
       realname: user.realname,
       username: user.username,
       num_posts: userProfile.num_posts,
-      num_followers: userProfile.num_followers,
+      num_followers: userProfile.num_following,
       num_following: userProfile.num_following,
       bio: userProfile.bio,
       message: "Profile Data found",
@@ -185,25 +262,99 @@ app.post("/search-user", async (req, res) => {
       $or: [{ realname: nameOfUser }, { username: nameOfUser }],
     });
 
-    if(searchedProfile)
-    {
+    if (searchedProfile) {
       res.send({
         search_success: true,
         message: "User found.",
-        profiles: searchedProfile
+        profiles: searchedProfile,
       });
-    }
-    else{
+    } else {
       res.send({
         search_success: false,
-        message: "User not found."
-      })
+        message: "User not found.",
+      });
     }
   } catch (err) {
     res.send({
       search_success: false,
-      message: "Request Error"
+      message: "Request Error",
     });
+  }
+});
+
+app.get("/get-all-users", async (req, res) => {
+  try {
+    const allUsers = await userData.find();
+    if (allUsers) {
+      res.send({
+        status: true,
+        data: allUsers,
+      });
+    } else {
+      res.send({
+        status: false,
+        data: null,
+      });
+    }
+  } catch (err) {
+    res.send({
+      status: false,
+      message: "Request Error",
+    });
+  }
+});
+
+app.post("/is-user-online", (req, res) => {
+  const { recuserName } = req.body;
+
+  if (activeUsers[recuserName]) {
+    res.send({
+      online: true,
+      socket_id: activeUsers[recuserName],
+    });
+  } else {
+    res.send({
+      online: false,
+    });
+  }
+});
+
+app.post("/auth", async (req, res) => {
+  try {
+    // get the code from frontend
+    const code = req.headers.authorization;
+    console.log("Authorization Code:", code);
+
+    // Exchange the authorization code for an access token
+    const response = await axios.post("https://oauth2.googleapis.com/token", {
+      code,
+      client_id:
+        process.env.CLIENT_ID,
+      client_secret: process.env.CLIENT_SECRET,
+      redirect_uri: "http://localhost:3000/main",
+      grant_type: "authorization_code",
+    });
+    const accessToken = response.data.access_token;
+    console.log("Access Token:", accessToken);
+
+    // Fetch user details using the access token
+    const userResponse = await axios.get(
+      "https://www.googleapis.com/oauth2/v3/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+    const userDetails = userResponse.data;
+    console.log("User Details:", userDetails);
+
+    // Process user details and perform necessary actions
+
+    res.status(200).json({ message: "Authentication successful" });
+  } catch (error) {
+    console.error("Error saving code:", error);
+    res.status(500).json({ message: "Failed to save code" });
   }
 });
 
@@ -271,4 +422,4 @@ app.post("/search-user", async (req, res) => {
 //   createdAt: new Date(),
 // });
 
-app.listen(port);
+server.listen(port);
