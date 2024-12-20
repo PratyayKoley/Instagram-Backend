@@ -6,6 +6,11 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const { createServer } = require("http");
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const fs = require("fs");
+const path = require("path");
+const sharp = require("sharp");
 const { OAuth2Client } = require("google-auth-library");
 
 const saltRounds = 10;
@@ -44,10 +49,20 @@ app.use(cors());
 app.use(bodyParser.json());
 const activeUsers = {};
 const oauth2Client = new OAuth2Client();
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET
+})
+const uploadsPath = path.join(__dirname, "./uploads");
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
 
 const salt = bcrypt.genSaltSync(saltRounds);
 const port = process.env.PORT || 5000;
 console.log("Server is running on port : ", port);
+
 
 app.get("/", function (req, res) {
   res.send("Hello");
@@ -62,7 +77,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send-message", async (data) => {
-    const {from, to, message} = data;
+    const { from, to, message } = data;
 
     try {
       // Ensure 'from' and 'to' are valid ObjectIds
@@ -72,7 +87,7 @@ io.on("connection", (socket) => {
       if (!fromUser) {
         throw new Error("Invalid 'from' user");
       }
-      if(!toUser){
+      if (!toUser) {
         throw new Error("Invalid 'to' user");
       }
 
@@ -217,6 +232,7 @@ app.post("/get-user-data", async (req, res) => {
     const data = await userData.findOne({ username: userName });
     res.send({
       userData: true,
+      user_id: data._id,
       realname: data.realname,
       username: data.username,
       message: "User Found",
@@ -240,6 +256,7 @@ app.post("/get-profile-data", async (req, res) => {
       success: true,
       realname: user.realname,
       username: user.username,
+      id: user._id,
       num_posts: userProfile.num_posts,
       num_followers: userProfile.num_following,
       num_following: userProfile.num_following,
@@ -319,6 +336,131 @@ app.post("/is-user-online", (req, res) => {
   }
 });
 
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "./uploads");
+  },
+  filename: function (req, file, cb) {
+    const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `${file.fieldname}-${uniqueName}${path.extname(file.originalname)}`);
+  }
+})
+
+const upload = multer({ storage: storage });
+
+const cloudinaryUpload = async (localFilePath) => {
+  try {
+    if (!localFilePath) {
+      return null;
+    }
+    const response = await cloudinary.uploader.upload(localFilePath, {
+      resource_type: "auto"
+    })
+    fs.unlinkSync(localFilePath);
+    return response.secure_url;
+  } catch (error) {
+    if (fs.existsSync(localFilePath)) {
+      fs.unlinkSync(localFilePath);
+    }
+    throw error;
+  }
+}
+
+app.post("/uploads", upload.array("file", 10), async (req, res) => {
+  try {
+    const { description, userName } = req.body;
+
+    const response = await fetch(`${process.env.BACKEND_LINK}/get-user-data`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userName }),
+    })
+
+    const responseData = await response.json();
+
+    if (responseData.userData) {
+      user_id = responseData.user_id;
+    }
+
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      return res.send({
+        success: false,
+        message: "No files were uploaded."
+      })
+    }
+
+    const cloudinaryURLs = [];
+
+    for (const file of files) {
+      const format = Math.random() < 0.5 ? "avif" : "webp";
+      const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const formattedFilePath = `./uploads/${uniqueName}.${format}`;
+
+      await sharp(file.path).toFormat(format).toFile(formattedFilePath);
+      fs.unlink(file.path, (err) => {
+        if (err) {
+          console.error('Error deleting file:', err.message);
+        }
+      });
+
+      const uploadedURL = await cloudinaryUpload(formattedFilePath);
+      cloudinaryURLs.push(uploadedURL);
+    }
+
+    const newPost = postData.create({
+      post_url: cloudinaryURLs.join(", "),
+      post_desc: description,
+      user_id: user_id,
+    })
+
+    const profilePostsUpdate = await profileData.updateOne({ user_id: user_id }, { $inc: { num_posts: 1 } });
+    if (newPost && profilePostsUpdate) {
+      res.send({
+        success: true,
+        postData: newPost,
+        message: "Posts uploaded successfully and incremented",
+      })
+    }
+  } catch (error) {
+    console.error(error);
+    return res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+});
+
+app.get("/posts/:id", async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const posts = await postData.find({ user_id: userId })
+      .sort({ createdAt: -1 });
+
+    if (!posts || posts.length === 0) {
+      return res.send({
+        success: false,
+        message: "No posts found",
+      })
+    }
+
+    return res.send({
+      success: true,
+      posts: posts,
+      message: "Posts successfully found",
+    })
+  }
+  catch (err) {
+    return res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+
+})
+
 app.post("/auth", async (req, res) => {
   try {
     // get the code from frontend
@@ -388,15 +530,6 @@ app.post("/auth", async (req, res) => {
 //   const result = await userData.deleteOne({realname: "shfuhid"});
 //   res.send("Success");
 // })
-
-// postData.create({
-//   post_url: String,
-//   num_likes: 0,
-//   num_comments: 0,
-//   post_desc: String,
-//   user_id: '669c0dec7406d0e13fc36a54',
-//   createdAt: new Date(),
-// });
 
 // storiesData.create({
 //   story_url: String,

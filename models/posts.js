@@ -10,7 +10,7 @@ const postSchema = new mongoose.Schema({
     ref: "users",
     required: true,
   },
-  createdAt: {type: String},
+  createdAt: {type: Date, default: Date.now()},
 });
 
 mongoose.model("Posts", postSchema);
