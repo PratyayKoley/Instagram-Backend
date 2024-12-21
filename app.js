@@ -38,7 +38,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: process.env.FRONTEND_LINK,
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -476,6 +476,13 @@ app.get("/posts/:id", async (req, res) => {
       message: "Internal Server Error",
     })
   }
+})
+
+app.post("/post-comment", async (req, res) => {
+  const { post_desc } = req.body;
+});
+
+app.post("/get-comments", async (req, res) => {
 
 })
 
