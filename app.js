@@ -479,11 +479,69 @@ app.get("/posts/:id", async (req, res) => {
 })
 
 app.post("/post-comment", async (req, res) => {
-  const { post_desc } = req.body;
+  try {
+    const { comment, commentor_name, post_id } = req.body;
+
+    if(!comment || !commentor_name || !post_id) {
+      return;
+    }
+
+    const newComment = await commentsData.create({
+      post_id: post_id,
+      user_name: commentor_name,
+      comment_desc: comment
+    });
+
+    if (!newComment) {
+      return res.send({
+        success: false,
+        message: "No comments were found",
+      })
+    }
+
+    res.send({
+      success: true,
+      commentData: newComment,
+      message: "Comment was added",
+    })
+  } catch (err) {
+    console.error("Error: ", err.message);
+    return res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
 });
 
 app.post("/get-comments", async (req, res) => {
+  try {
+    const { post_id } = req.body;
 
+    if(!post_id) {
+      return;
+    }
+
+    const allComments = await commentsData.find({post_id: post_id});
+
+    if(!allComments) {
+      return res.send({
+        success: false,
+        message: "No comments were found",
+      })
+    }
+
+    res.send({
+      success: true,
+      commentData: allComments,
+      message: "Comments found successfully",
+    })
+  } catch (error) {
+    console.error("Error: ", error);
+    res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
 })
 
 app.post("/auth", async (req, res) => {
