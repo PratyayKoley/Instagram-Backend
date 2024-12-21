@@ -245,6 +245,24 @@ app.post("/get-user-data", async (req, res) => {
   }
 });
 
+app.post("/get-user-data-by-id", async (req, res) => {
+  const { user_id } = req.body;
+
+  try {
+    const data = await userData.findById(user_id);
+    res.send({
+      userData: true,
+      data: data,
+      message: "User Found",
+    });
+  } catch (err) {
+    res.send({
+      userData: false,
+      message: "User Data null",
+    });
+  }
+});
+
 app.post("/get-profile-data", async (req, res) => {
   const { username } = req.body;
 
