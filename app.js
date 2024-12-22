@@ -482,7 +482,7 @@ app.post("/post-comment", async (req, res) => {
   try {
     const { comment, commentor_name, post_id } = req.body;
 
-    if(!comment || !commentor_name || !post_id) {
+    if (!comment || !commentor_name || !post_id) {
       return;
     }
 
@@ -517,13 +517,13 @@ app.post("/get-comments", async (req, res) => {
   try {
     const { post_id } = req.body;
 
-    if(!post_id) {
+    if (!post_id) {
       return;
     }
 
-    const allComments = await commentsData.find({post_id: post_id});
+    const allComments = await commentsData.find({ post_id: post_id });
 
-    if(!allComments) {
+    if (!allComments) {
       return res.send({
         success: false,
         message: "No comments were found",
@@ -534,6 +534,107 @@ app.post("/get-comments", async (req, res) => {
       success: true,
       commentData: allComments,
       message: "Comments found successfully",
+    })
+  } catch (error) {
+    console.error("Error: ", error);
+    res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+});
+
+app.post("/post-likes", async (req, res) => {
+  try {
+    const { post_id, liker_name } = req.body;
+
+    if (!post_id || !liker_name) {
+      return;
+    }
+
+    const postLikes = await likesData.create({
+      post_id: post_id,
+      user_name: liker_name,
+    });
+
+    if (!postLikes) {
+      return res.send({
+        success: false,
+        message: "Invalid post id or username",
+      })
+    }
+
+    res.send({
+      success: true,
+      likeData: postLikes,
+      message: "Likes were successfully posted",
+    })
+  } catch (error) {
+    console.error("Error: ", error);
+    res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+});
+
+app.delete("/post-likes", async (req, res) => {
+  try {
+    const { post_id, liker_name } = req.body;
+
+    if (!post_id || !liker_name) {
+      return;
+    }
+
+    const postLikes = await likesData.deleteOne({
+      post_id: post_id,
+      user_name: liker_name,
+    });
+
+    if (!postLikes) {
+      return res.send({
+        success: false,
+        message: "Invalid post id or username",
+      })
+    }
+
+    res.send({
+      success: true,
+      likeData: postLikes,
+      message: "Likes were successfully deleted.",
+    })
+  } catch (error) {
+    console.error("Error: ", error);
+    res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+})
+
+app.post("/get-post-like", async (req, res) => {
+  try {
+    const { post_id, liker_name } = req.body;
+
+    if(!post_id || !liker_name) {
+      return;
+    }
+
+    const isLiked = await likesData.findOne({
+      post_id: post_id,
+      user_name: liker_name,
+    });
+
+    if(!isLiked){
+      return res.send({
+        success: false,
+        message: "No likes found",
+      })
+    }
+
+    res.send({
+      success: true,
+      message: "Likes found",
     })
   } catch (error) {
     console.error("Error: ", error);
@@ -623,13 +724,6 @@ app.post("/auth", async (req, res) => {
 // likesData.create({
 //   post_id: '669c0dec7406d0e13fc36a54',
 //   user_id: '669c0dec7406d0e13fc36a54',
-//   createdAt: new Date(),
-// });
-
-// commentsData.create({
-//   post_id: '669c0dec7406d0e13fc36a54',
-//   user_id: '669c0dec7406d0e13fc36a54',
-//   comment_desc: String,
 //   createdAt: new Date(),
 // });
 
