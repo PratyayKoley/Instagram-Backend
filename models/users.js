@@ -9,4 +9,4 @@ const userSchema = new mongoose.Schema({
   createdAt: String,
 });
 
-mongoose.model("User", userSchema);
+mongoose.model("Users", userSchema);

@@ -25,7 +25,7 @@ const comments = require("./models/comments.js");
 const notifications = require("./models/notifications.js");
 const messages = require("./models/messages.js");
 
-const userData = mongoose.model("User", users.userSchema);
+const userData = mongoose.model("Users", users.userSchema);
 const profileData = mongoose.model("Profile", profile.profileSchema);
 const postData = mongoose.model("Posts", posts.postSchema);
 const storiesData = mongoose.model("Stories", stories.storiesSchema);
@@ -161,6 +161,8 @@ app.post("/register", async (req, res) => {
       createdAt: new Date(),
     });
     res.send("Signup Successful");
+
+    console.log(profileData);
   }
 });
 
@@ -276,8 +278,8 @@ app.post("/get-profile-data", async (req, res) => {
       username: user.username,
       id: user._id,
       num_posts: userProfile.num_posts,
-      num_followers: userProfile.num_following,
-      num_following: userProfile.num_following,
+      followers: userProfile.followers,
+      following: userProfile.following,
       bio: userProfile.bio,
       message: "Profile Data found",
     });
@@ -616,7 +618,7 @@ app.post("/get-post-like", async (req, res) => {
   try {
     const { post_id, liker_name } = req.body;
 
-    if(!post_id || !liker_name) {
+    if (!post_id || !liker_name) {
       return;
     }
 
@@ -625,7 +627,7 @@ app.post("/get-post-like", async (req, res) => {
       user_name: liker_name,
     });
 
-    if(!isLiked){
+    if (!isLiked) {
       return res.send({
         success: false,
         message: "No likes found",
@@ -684,6 +686,91 @@ app.post("/auth", async (req, res) => {
   }
 });
 
+app.post("/follow", async (req, res) => {
+  try {
+    const { userToFollowID, currentUserID } = req.body;
+
+    if (!userToFollowID || !currentUserID) {
+      return res.send({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+
+    const userToFollowProfile = await profileData.findOne({ user_id: userToFollowID });
+    const currentUserProfile = await profileData.findOne({ user_id: currentUserID });
+
+    if (!currentUserProfile.following.includes(userToFollowID)) {
+      currentUserProfile.following.push(userToFollowID);
+      userToFollowProfile.followers.push(currentUserID);
+
+      await currentUserProfile.save();
+      await userToFollowProfile.save();
+
+      res.send({
+        success: true,
+        message: "Successfully followed the user.",
+      })
+    } else {
+      res.send({
+        success: false,
+        message: "You are already following the user.",
+      })
+    }
+  } catch (error) {
+    console.error("Error: ", error);
+    res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+});
+
+app.post("/unfollow", async (req, res) => {
+  try {
+    const { userToUnfollowID, currentUserID } = req.body;
+
+    if (!userToUnfollowID || !currentUserID) {
+      return res.send({
+        success: false,
+        message: "No user Found.",
+      })
+    }
+
+    const userToUnfollowProfile = await profileData.findOne({ user_id: userToUnfollowID });
+    const currentUserProfile = await profileData.findOne({ user_id: currentUserID });
+
+    if (currentUserProfile.following.includes(userToUnfollowID)) {
+      currentUserProfile.following = currentUserProfile.following.filter((id) => {
+        id.toString() !== userToUnfollowID.toString();
+      });
+      userToUnfollowProfile.followers = userToUnfollowProfile.followers.filter((id) => {
+        id.toString() !== currentUserID.toString();
+      });
+
+      await currentUserProfile.save();
+      await userToUnfollowProfile.save();
+
+      res.send({
+        success: true,
+        message: "Successfully unfollowed the user",
+      })
+    } else {
+      res.send({
+        success: false,
+        message: "You are not following this user.",
+      })
+    }
+  } catch (error) {
+    console.error("Error: ", error);
+    res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+})
+
 // Find
 // app.get("/users", async (req, res) => {
 //   try {
@@ -717,12 +804,6 @@ app.post("/auth", async (req, res) => {
 
 // storiesData.create({
 //   story_url: String,
-//   user_id: '669c0dec7406d0e13fc36a54',
-//   createdAt: new Date(),
-// });
-
-// likesData.create({
-//   post_id: '669c0dec7406d0e13fc36a54',
 //   user_id: '669c0dec7406d0e13fc36a54',
 //   createdAt: new Date(),
 // });
