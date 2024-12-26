@@ -730,46 +730,60 @@ app.post("/follow", async (req, res) => {
 app.post("/unfollow", async (req, res) => {
   try {
     const { userToUnfollowID, currentUserID } = req.body;
+    console.log(userToUnfollowID, currentUserID);
 
     if (!userToUnfollowID || !currentUserID) {
       return res.send({
         success: false,
-        message: "No user Found.",
-      })
+        message: "No user found.",
+      });
     }
 
     const userToUnfollowProfile = await profileData.findOne({ user_id: userToUnfollowID });
     const currentUserProfile = await profileData.findOne({ user_id: currentUserID });
 
-    if (currentUserProfile.following.includes(userToUnfollowID)) {
-      currentUserProfile.following = currentUserProfile.following.filter((id) => {
-        id.toString() !== userToUnfollowID.toString();
+    if (!userToUnfollowProfile || !currentUserProfile) {
+      return res.send({
+        success: false,
+        message: "User profiles not found.",
       });
-      userToUnfollowProfile.followers = userToUnfollowProfile.followers.filter((id) => {
-        id.toString() !== currentUserID.toString();
-      });
+    }
 
+    if (currentUserProfile.following.includes(userToUnfollowID)) {
+      // Update the arrays by filtering out the IDs
+      currentUserProfile.following = currentUserProfile.following.filter(
+        (id) => id.toString() !== userToUnfollowID.toString()
+      );
+      userToUnfollowProfile.followers = userToUnfollowProfile.followers.filter(
+        (id) => id.toString() !== currentUserID.toString()
+      );
+
+      console.log("Updated following: ", currentUserProfile.following);
+      console.log("Updated followers: ", userToUnfollowProfile.followers);
+
+      // Save the updated profiles
       await currentUserProfile.save();
       await userToUnfollowProfile.save();
 
       res.send({
         success: true,
-        message: "Successfully unfollowed the user",
-      })
+        message: "Successfully unfollowed the user.",
+      });
     } else {
       res.send({
         success: false,
         message: "You are not following this user.",
-      })
+      });
     }
   } catch (error) {
     console.error("Error: ", error);
     res.send({
       success: false,
       message: "Internal Server Error",
-    })
+    });
   }
-})
+});
+
 
 // Find
 // app.get("/users", async (req, res) => {
