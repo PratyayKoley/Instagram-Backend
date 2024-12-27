@@ -548,15 +548,15 @@ app.post("/get-comments", async (req, res) => {
 
 app.post("/post-likes", async (req, res) => {
   try {
-    const { post_id, liker_name } = req.body;
+    const { post_id, liker_id } = req.body;
 
-    if (!post_id || !liker_name) {
+    if (!post_id || !liker_id) {
       return;
     }
 
     const postLikes = await likesData.create({
       post_id: post_id,
-      user_name: liker_name,
+      user_id: liker_id,
     });
 
     if (!postLikes) {
@@ -582,15 +582,15 @@ app.post("/post-likes", async (req, res) => {
 
 app.delete("/post-likes", async (req, res) => {
   try {
-    const { post_id, liker_name } = req.body;
+    const { post_id, liker_id } = req.body;
 
-    if (!post_id || !liker_name) {
+    if (!post_id || !liker_id) {
       return;
     }
 
     const postLikes = await likesData.deleteOne({
       post_id: post_id,
-      user_name: liker_name,
+      user_id: liker_id,
     });
 
     if (!postLikes) {
@@ -614,17 +614,17 @@ app.delete("/post-likes", async (req, res) => {
   }
 })
 
-app.post("/get-post-like", async (req, res) => {
+app.post("/isLiked", async (req, res) => {
   try {
-    const { post_id, liker_name } = req.body;
+    const { post_id, liker_id } = req.body;
 
-    if (!post_id || !liker_name) {
+    if (!post_id || !liker_id) {
       return;
     }
 
     const isLiked = await likesData.findOne({
       post_id: post_id,
-      user_name: liker_name,
+      user_id: liker_id,
     });
 
     if (!isLiked) {
@@ -636,6 +636,32 @@ app.post("/get-post-like", async (req, res) => {
 
     res.send({
       success: true,
+      message: "Likes found",
+    })
+  } catch (error) {
+    console.error("Error: ", error);
+    res.send({
+      success: false,
+      message: "Internal Server Error",
+    })
+  }
+})
+
+app.post("/get-all-likes", async (req, res) => {
+  try {
+    const { post_id } = req.body;
+    const allLikes = await likesData.find({ post_id: post_id }).populate("user_id", "-password -__v");
+
+    if (!allLikes) {
+      return res.send({
+        success: false,
+        message: "No likes found",
+      })
+    }
+
+    res.send({
+      success: true,
+      likesData: allLikes,
       message: "Likes found",
     })
   } catch (error) {
